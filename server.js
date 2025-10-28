@@ -1,12 +1,13 @@
 require('dotenv').config();
 const express = require('express');
 const mysql = require('mysql2/promise');
+const bcrypt = require('bcrypt');
 const app = express();
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// สร้าง connection pool
+// ✅ สร้าง connection pool
 const db = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
@@ -28,9 +29,10 @@ app.get('/ping', async (req, res) => {
 // ✅ GET: ดึงผู้ใช้ทั้งหมด
 app.get('/users', async (req, res) => {
   try {
-    const [rows] = await db.query('SELECT * FROM tbl_users');
+    const [rows] = await db.query('SELECT id, firstname, fullname, lastname, username, status FROM tbl_users');
     res.json(rows);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Query failed' });
   }
 });
@@ -39,32 +41,39 @@ app.get('/users', async (req, res) => {
 app.get('/users/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    const [rows] = await db.query('SELECT * FROM tbl_users WHERE id = ?', [id]);
+    const [rows] = await db.query('SELECT id, firstname, fullname, lastname, username, status FROM tbl_users WHERE id = ?', [id]);
     if (rows.length === 0) {
       return res.status(404).json({ message: 'User not found' });
     }
     res.json(rows[0]);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'Query failed' });
   }
 });
 
-
-// ตัวอย่าง POST ข้อมูล
+// ✅ POST: เพิ่มผู้ใช้ใหม่ (hash password)
 app.post('/users', async (req, res) => {
-  const {firstname, fullname, lastname, username, password, status} = req.body;
+  const { firstname, fullname, lastname, username, password, status } = req.body;
+
   try {
+    if (!password) return res.status(400).json({ error: 'Password is required' });
+
+    // เข้ารหัสรหัสผ่านก่อนบันทึก
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const [result] = await db.query(
       'INSERT INTO tbl_users (firstname, fullname, lastname, username, password, status) VALUES (?, ?, ?, ?, ?, ?)',
-        [firstname, fullname, lastname, username, password, status]
+      [firstname, fullname, lastname, username, hashedPassword, status]
     );
+
     res.json({
+      message: 'User created successfully',
       id: result.insertId,
       firstname,
       fullname,
       lastname,
       username,
-      password,
       status,
     });
   } catch (err) {
@@ -73,41 +82,38 @@ app.post('/users', async (req, res) => {
   }
 });
 
-// ✅ PUT: อัปเดตผู้ใช้ตาม ID
+// ✅ PUT: อัปเดตข้อมูลผู้ใช้ (hash password ถ้ามีส่งมา)
 app.put('/users/:id', async (req, res) => {
   const { id } = req.params;
   const { firstname, fullname, lastname, username, password, status } = req.body;
 
   try {
-    // ตรวจสอบก่อนว่าผู้ใช้มีอยู่จริง
     const [existing] = await db.query('SELECT * FROM tbl_users WHERE id = ?', [id]);
     if (existing.length === 0) {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // อัปเดตข้อมูล
-    const [result] = await db.query(
-      'UPDATE tbl_users SET firstname = ?, fullname = ?, lastname = ?, username = ?, password = ?, status = ? WHERE id = ?',
-      [firstname, fullname, lastname, username, password, status, id]
-    );
+    let query = 'UPDATE tbl_users SET firstname = ?, fullname = ?, lastname = ?, username = ?, status = ?';
+    const params = [firstname, fullname, lastname, username, status];
 
-    res.json({
-      message: 'User updated successfully',
-      id: id,
-      firstname,
-      fullname,
-      lastname,
-      username,
-      password,
-      status
-    });
+    // ถ้ามี password ใหม่ -> hash ก่อน
+    if (password) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      query += ', password = ?';
+      params.push(hashedPassword);
+    }
+
+    query += ' WHERE id = ?';
+    params.push(id);
+
+    await db.query(query, params);
+
+    res.json({ message: 'User updated successfully' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Update failed' });
   }
 });
-
-
 
 // ✅ DELETE: ลบผู้ใช้ตาม ID
 app.delete('/users/:id', async (req, res) => {
@@ -126,7 +132,6 @@ app.delete('/users/:id', async (req, res) => {
   }
 });
 
-
 // ✅ เริ่มเซิร์ฟเวอร์
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
