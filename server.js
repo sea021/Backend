@@ -2,12 +2,13 @@ require('dotenv').config();
 const express = require('express');
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcrypt');
-const app = express();
+const jwt = require('jsonwebtoken');
+const verifyToken = require('./middleware/auth');
 
+const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ✅ สร้าง connection pool
 const db = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
@@ -15,7 +16,9 @@ const db = mysql.createPool({
   database: process.env.DB_NAME,
 });
 
-// ✅ Route ทดสอบ
+const SECRET_KEY = process.env.JWT_SECRET;
+
+// ✅ Test route
 app.get('/ping', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT NOW() AS now');
@@ -26,45 +29,16 @@ app.get('/ping', async (req, res) => {
   }
 });
 
-// ✅ GET: ดึงผู้ใช้ทั้งหมด
-app.get('/users', async (req, res) => {
-  try {
-    const [rows] = await db.query('SELECT id, firstname, fullname, lastname, username, status FROM tbl_users');
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Query failed' });
-  }
-});
-
-// ✅ GET: ดึงผู้ใช้ตาม ID
-app.get('/users/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    const [rows] = await db.query('SELECT id, firstname, fullname, lastname, username, status FROM tbl_users WHERE id = ?', [id]);
-    if (rows.length === 0) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    res.json(rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Query failed' });
-  }
-});
-
-// ✅ POST: เพิ่มผู้ใช้ใหม่ (hash password)
+// ✅ Public route: Signup
 app.post('/users', async (req, res) => {
   const { firstname, fullname, lastname, username, password, status } = req.body;
-
   try {
     if (!password) return res.status(400).json({ error: 'Password is required' });
-
-    // เข้ารหัสรหัสผ่านก่อนบันทึก
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const [result] = await db.query(
       'INSERT INTO tbl_users (firstname, fullname, lastname, username, password, status) VALUES (?, ?, ?, ?, ?, ?)',
-      [firstname, fullname, lastname, username, hashedPassword, status]
+      [firstname, fullname, lastname, username, hashedPassword, status || 'user']
     );
 
     res.json({
@@ -74,7 +48,7 @@ app.post('/users', async (req, res) => {
       fullname,
       lastname,
       username,
-      status,
+      status: status || 'user',
     });
   } catch (err) {
     console.error(err);
@@ -82,21 +56,95 @@ app.post('/users', async (req, res) => {
   }
 });
 
-// ✅ PUT: อัปเดตข้อมูลผู้ใช้ (hash password ถ้ามีส่งมา)
-app.put('/users/:id', async (req, res) => {
+// ✅ Public route: Login
+app.post('/login', async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    const [rows] = await db.query('SELECT * FROM tbl_users WHERE username = ?', [username]);
+    if (!rows.length) return res.status(401).json({ error: 'Invalid username or password' });
+
+    const user = rows[0];
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(401).json({ error: 'Invalid username or password' });
+
+    const token = jwt.sign(
+      { id: user.id, username: user.username, status: user.status },
+      SECRET_KEY,
+      { expiresIn: '1h' }
+    );
+
+    res.json({
+      message: 'Login successful',
+      token,
+      user: {
+        id: user.id,
+        fullname: user.fullname,
+        username: user.username,
+        status: user.status,
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// ✅ Protected route: Profile
+app.get('/profile', verifyToken, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      'SELECT id, fullname, username, status FROM tbl_users WHERE id = ?',
+      [req.user.id]
+    );
+    if (!rows.length) return res.status(404).json({ message: 'User not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Cannot fetch profile' });
+  }
+});
+
+// ✅ Protected route: Get all users
+app.get('/users', verifyToken, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      'SELECT id, firstname, fullname, lastname, username, status FROM tbl_users'
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Query failed' });
+  }
+});
+
+// ✅ Protected route: Get user by ID
+app.get('/users/:id', verifyToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [rows] = await db.query(
+      'SELECT id, firstname, fullname, lastname, username, status FROM tbl_users WHERE id = ?',
+      [id]
+    );
+    if (!rows.length) return res.status(404).json({ message: 'User not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Query failed' });
+  }
+});
+
+// ✅ Protected route: Update user
+app.put('/users/:id', verifyToken, async (req, res) => {
   const { id } = req.params;
   const { firstname, fullname, lastname, username, password, status } = req.body;
 
   try {
     const [existing] = await db.query('SELECT * FROM tbl_users WHERE id = ?', [id]);
-    if (existing.length === 0) {
-      return res.status(404).json({ message: 'User not found' });
-    }
+    if (!existing.length) return res.status(404).json({ message: 'User not found' });
 
     let query = 'UPDATE tbl_users SET firstname = ?, fullname = ?, lastname = ?, username = ?, status = ?';
     const params = [firstname, fullname, lastname, username, status];
 
-    // ถ้ามี password ใหม่ -> hash ก่อน
     if (password) {
       const hashedPassword = await bcrypt.hash(password, 10);
       query += ', password = ?';
@@ -107,7 +155,6 @@ app.put('/users/:id', async (req, res) => {
     params.push(id);
 
     await db.query(query, params);
-
     res.json({ message: 'User updated successfully' });
   } catch (err) {
     console.error(err);
@@ -115,16 +162,12 @@ app.put('/users/:id', async (req, res) => {
   }
 });
 
-// ✅ DELETE: ลบผู้ใช้ตาม ID
-app.delete('/users/:id', async (req, res) => {
+// ✅ Protected route: Delete user
+app.delete('/users/:id', verifyToken, async (req, res) => {
   const { id } = req.params;
   try {
     const [result] = await db.query('DELETE FROM tbl_users WHERE id = ?', [id]);
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
+    if (!result.affectedRows) return res.status(404).json({ message: 'User not found' });
     res.json({ message: 'User deleted successfully' });
   } catch (err) {
     console.error(err);
@@ -132,6 +175,6 @@ app.delete('/users/:id', async (req, res) => {
   }
 });
 
-// ✅ เริ่มเซิร์ฟเวอร์
+// ✅ Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
