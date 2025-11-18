@@ -9,9 +9,10 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// === MySQL Connection Pool ===
 const db = mysql.createPool({
   host: process.env.DB_HOST,
-   port: process.env.DB_PORT, //เพิ่ม port
+  port: process.env.DB_PORT,
   user: process.env.DB_USER,
   password: process.env.DB_PASS,
   database: process.env.DB_NAME,
@@ -19,7 +20,7 @@ const db = mysql.createPool({
 
 const SECRET_KEY = process.env.JWT_SECRET;
 
-// ✅ Test route
+// === Ping Test ===
 app.get('/ping', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT NOW() AS now');
@@ -30,11 +31,13 @@ app.get('/ping', async (req, res) => {
   }
 });
 
-// ✅ Public route: Signup
+// === USER SIGNUP ===
 app.post('/users', async (req, res) => {
   const { firstname, fullname, lastname, username, password, status } = req.body;
+
   try {
     if (!password) return res.status(400).json({ error: 'Password is required' });
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const [result] = await db.query(
@@ -57,14 +60,16 @@ app.post('/users', async (req, res) => {
   }
 });
 
-// ✅ Public route: Login
+// === LOGIN ===
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
+
   try {
     const [rows] = await db.query('SELECT * FROM tbl_users WHERE username = ?', [username]);
     if (!rows.length) return res.status(401).json({ error: 'Invalid username or password' });
 
     const user = rows[0];
+
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ error: 'Invalid username or password' });
 
@@ -90,7 +95,16 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// ✅ Protected route: Profile
+// === LOGOUT ===
+// ใช้สำหรับให้ Client ลบ Token ทิ้ง
+app.post('/logout', (req, res) => {
+  res.json({
+    message: 'Logout successful',
+    note: 'Please remove token on client side (localStorage/cookie).'
+  });
+});
+
+// === PROFILE (Protected) ===
 app.get('/profile', verifyToken, async (req, res) => {
   try {
     const [rows] = await db.query(
@@ -105,7 +119,7 @@ app.get('/profile', verifyToken, async (req, res) => {
   }
 });
 
-// ✅ Protected route: Get all users
+// === Get All Users (Protected) ===
 app.get('/users', verifyToken, async (req, res) => {
   try {
     const [rows] = await db.query(
@@ -118,9 +132,10 @@ app.get('/users', verifyToken, async (req, res) => {
   }
 });
 
-// ✅ Protected route: Get user by ID
+// === Get User by ID (Protected) ===
 app.get('/users/:id', verifyToken, async (req, res) => {
   const { id } = req.params;
+
   try {
     const [rows] = await db.query(
       'SELECT id, firstname, fullname, lastname, username, status FROM tbl_users WHERE id = ?',
@@ -134,7 +149,7 @@ app.get('/users/:id', verifyToken, async (req, res) => {
   }
 });
 
-// ✅ Protected route: Update user
+// === Update User (Protected) ===
 app.put('/users/:id', verifyToken, async (req, res) => {
   const { id } = req.params;
   const { firstname, fullname, lastname, username, password, status } = req.body;
@@ -163,9 +178,10 @@ app.put('/users/:id', verifyToken, async (req, res) => {
   }
 });
 
-// ✅ Protected route: Delete user
+// === Delete User ===
 app.delete('/users/:id', verifyToken, async (req, res) => {
   const { id } = req.params;
+
   try {
     const [result] = await db.query('DELETE FROM tbl_users WHERE id = ?', [id]);
     if (!result.affectedRows) return res.status(404).json({ message: 'User not found' });
@@ -176,6 +192,6 @@ app.delete('/users/:id', verifyToken, async (req, res) => {
   }
 });
 
-// ✅ Start server
+// === Start Server ===
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
