@@ -9,7 +9,7 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// === MySQL Connection Pool ===
+// === MySQL Pool ===
 const db = mysql.createPool({
   host: process.env.DB_HOST,
   port: process.env.DB_PORT,
@@ -18,6 +18,7 @@ const db = mysql.createPool({
   database: process.env.DB_NAME,
 });
 
+// JWT Secret
 const SECRET_KEY = process.env.JWT_SECRET;
 
 // === Ping Test ===
@@ -45,7 +46,7 @@ app.post('/users', async (req, res) => {
       [firstname, fullname, lastname, username, hashedPassword, status || 'user']
     );
 
-    res.json({
+    res.status(201).json({
       message: 'User created successfully',
       id: result.insertId,
       firstname,
@@ -69,7 +70,6 @@ app.post('/login', async (req, res) => {
     if (!rows.length) return res.status(401).json({ error: 'Invalid username or password' });
 
     const user = rows[0];
-
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ error: 'Invalid username or password' });
 
@@ -96,7 +96,6 @@ app.post('/login', async (req, res) => {
 });
 
 // === LOGOUT ===
-// ใช้สำหรับให้ Client ลบ Token ทิ้ง
 app.post('/logout', (req, res) => {
   res.json({
     message: 'Logout successful',
@@ -104,7 +103,7 @@ app.post('/logout', (req, res) => {
   });
 });
 
-// === PROFILE (Protected) ===
+// === PROFILE ===
 app.get('/profile', verifyToken, async (req, res) => {
   try {
     const [rows] = await db.query(
@@ -119,7 +118,7 @@ app.get('/profile', verifyToken, async (req, res) => {
   }
 });
 
-// === Get All Users (Protected) ===
+// === Get All Users ===
 app.get('/users', verifyToken, async (req, res) => {
   try {
     const [rows] = await db.query(
@@ -132,10 +131,9 @@ app.get('/users', verifyToken, async (req, res) => {
   }
 });
 
-// === Get User by ID (Protected) ===
+// === Get User by ID ===
 app.get('/users/:id', verifyToken, async (req, res) => {
   const { id } = req.params;
-
   try {
     const [rows] = await db.query(
       'SELECT id, firstname, fullname, lastname, username, status FROM tbl_users WHERE id = ?',
@@ -149,7 +147,7 @@ app.get('/users/:id', verifyToken, async (req, res) => {
   }
 });
 
-// === Update User (Protected) ===
+// === Update User ===
 app.put('/users/:id', verifyToken, async (req, res) => {
   const { id } = req.params;
   const { firstname, fullname, lastname, username, password, status } = req.body;
@@ -192,6 +190,11 @@ app.delete('/users/:id', verifyToken, async (req, res) => {
   }
 });
 
-// === Start Server ===
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
+// === Export app สำหรับ test ===
+module.exports = app;
+
+// === Start server ===
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => console.log(`🚀 Server running on http://localhost:${PORT}`));
+}
