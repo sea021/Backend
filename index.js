@@ -1,6 +1,6 @@
 require('dotenv').config();
 const express = require('express');
-const mysql = require('mysql2/promise');
+const db = require('./config/db');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const verifyToken = require('./middleware/auth');
@@ -10,13 +10,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // === MySQL Pool ===
-const db = mysql.createPool({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASS,
-  database: process.env.DB_NAME,
-});
+
 
 // JWT Secret
 const SECRET_KEY = process.env.JWT_SECRET;
