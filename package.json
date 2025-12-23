@@ -11,14 +11,17 @@
   "description": "Express backend with integration tests",
   "dependencies": {
     "bcrypt": "^6.0.0",
+    "body-parser": "^1.20.2",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.15.3",
-    "body-parser": "^1.20.2"
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "jest": "^30.2.0",
     "supertest": "^7.1.4"
+
   }
 }
