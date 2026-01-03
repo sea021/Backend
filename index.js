@@ -6,9 +6,20 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 const express = require('express');
+const cors = require('cors');              // ✅ (เพิ่ม)
 const { swaggerUi, specs } = require("./swagger");
 
 const app = express();
+
+// ==========================
+// Middleware (สำคัญมาก)
+// ==========================
+app.use(cors({                               // ✅ (เพิ่ม)
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -39,6 +50,13 @@ app.use(
     ],
   })
 );
+
+// ==========================
+// Root route (กัน Cannot GET /)
+// ==========================
+app.get('/', (req, res) => {                 // ✅ (เพิ่ม)
+  res.json({ status: 'API is running' });
+});
 
 // ==========================
 // JWT Secret check
