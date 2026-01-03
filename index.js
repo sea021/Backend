@@ -1,5 +1,9 @@
-// ✅ บังคับให้ใช้ .env.local
-require('dotenv').config({ path: '.env.local' });
+// ==========================
+// Load ENV (local เท่านั้น)
+// ==========================
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config({ path: '.env.local' });
+}
 
 const express = require('express');
 const { swaggerUi, specs } = require("./swagger");
@@ -11,32 +15,46 @@ app.use(express.urlencoded({ extended: true }));
 // ==========================
 // Routes
 // ==========================
-app.use('/api/users', require('./routes/users'));      // Register / Login / Logout
+app.use('/api/users', require('./routes/users'));
 app.use('/api/products', require('./routes/products'));
 
 // ==========================
-// Swagger
+// Swagger (ใช้แค่อันเดียว ❗)
 // ==========================
+const CSS_URL =
+  "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui.min.css";
+
 app.use(
   "/api-docs",
   swaggerUi.serve,
   swaggerUi.setup(specs, {
     swaggerOptions: {
-      supportedSubmitMethods: ["get", "post", "put", "delete"]
-    }
+      supportedSubmitMethods: ["get", "post", "put", "delete"],
+    },
+    customCss: ".swagger-ui .topbar { display: none }",
+    customCssUrl: CSS_URL,
+    customJs: [
+      "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-bundle.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-standalone-preset.js",
+    ],
   })
 );
 
-// JWT Secret (optional check)
-const SECRET_KEY = process.env.JWT_SECRET;
-if (!SECRET_KEY) {
-  console.warn('⚠️ JWT_SECRET is not defined in .env.local');
+// ==========================
+// JWT Secret check
+// ==========================
+if (!process.env.JWT_SECRET) {
+  console.warn("⚠️ JWT_SECRET is not defined");
 }
 
-// === Export app สำหรับ test ===
+// ==========================
+// Export app (สำคัญมากสำหรับ Vercel)
+// ==========================
 module.exports = app;
 
-// === Start server ===
+// ==========================
+// Start server (Local เท่านั้น)
+// ==========================
 if (require.main === module) {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => {
