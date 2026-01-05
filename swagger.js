@@ -1,8 +1,8 @@
 const swaggerJsdoc = require('swagger-jsdoc');
 const path = require('path');
 
-const serverUrl = process.env.VERCEL_URL
-  ? `https://${process.env.VERCEL_URL}`
+const serverUrl = process.env.NODE_ENV === 'production'
+  ? `https://backend-mauve-iota-64.vercel.app/`
   : `http://localhost:${process.env.PORT || 3000}`;
 
 const options = {
