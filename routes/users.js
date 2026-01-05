@@ -5,15 +5,16 @@ const jwt = require('jsonwebtoken');
 const db = require('../config/db');
 const verifyToken = require('../middleware/auth');
 
-
-
+/* =========================
+   PING DB
+========================= */
 router.get('/ping', async (req, res) => {
   const [rows] = await db.query('SELECT NOW() AS now');
   res.json({ status: 'ok', time: rows[0].now });
 });
 
 /* =========================
-   REGISTER
+   REGISTER + GET ALL USERS
 ========================= */
 /**
  * @openapi
@@ -50,6 +51,18 @@ router.get('/ping', async (req, res) => {
  *         description: Username already exists
  *       500:
  *         description: Internal server error
+ *   get:
+ *     tags: [Users]
+ *     summary: Get all users
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Users retrieved successfully
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Internal server error
  */
 router.post('/', async (req, res) => {
   const { firstname, fullname, lastname, username, password, status } = req.body;
@@ -83,6 +96,17 @@ router.post('/', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Register failed' });
+  }
+});
+
+router.get('/', verifyToken, async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      'SELECT id, firstname, fullname, lastname, username, status FROM tbl_users'
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
@@ -201,37 +225,7 @@ router.get('/profile', verifyToken, async (req, res) => {
 });
 
 /* =========================
-   GET ALL USERS
-========================= */
-/**
- * @openapi
- * /api/users:
- *   get:
- *     tags: [Users]
- *     summary: Get all users
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Users retrieved successfully
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Internal server error
- */
-router.get('/', verifyToken, async (req, res) => {
-  try {
-    const [rows] = await db.query(
-      'SELECT id, firstname, fullname, lastname, username, status FROM tbl_users'
-    );
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-/* =========================
-   UPDATE USER
+   UPDATE + DELETE USER
 ========================= */
 /**
  * @openapi
@@ -256,6 +250,24 @@ router.get('/', verifyToken, async (req, res) => {
  *         description: User not found
  *       500:
  *         description: Internal server error
+ *   delete:
+ *     tags: [Users]
+ *     summary: Delete user
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: User deleted successfully
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found
  */
 router.put('/:id', verifyToken, async (req, res) => {
   const { id } = req.params;
@@ -294,31 +306,6 @@ router.put('/:id', verifyToken, async (req, res) => {
   res.json({ message: 'User updated' });
 });
 
-/* =========================
-   DELETE USER
-========================= */
-/**
- * @openapi
- * /api/users/{id}:
- *   delete:
- *     tags: [Users]
- *     summary: Delete user
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *     responses:
- *       200:
- *         description: User deleted successfully
- *       401:
- *         description: Unauthorized
- *       404:
- *         description: User not found
- */
 router.delete('/:id', verifyToken, async (req, res) => {
   const [result] = await db.query(
     'DELETE FROM tbl_users WHERE id=?',
