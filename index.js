@@ -20,7 +20,8 @@ app.use((req, res, next) => {
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; " +
     "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://fonts.googleapis.com; " +
     "img-src 'self' data: validator.swagger.io; " +
-    "connect-src 'self' *;"
+    // ✅ เพิ่มตรงนี้: อนุญาตให้ connect ไปที่ domain ของตัวเองและทั้งหมด
+    "connect-src 'self' https://*.vercel.app *;" 
   );
   next();
 });
@@ -36,6 +37,8 @@ const uiOptions = { // เปลี่ยนชื่อเป็น uiOptions �
     "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-standalone-preset.js"
   ]
 };
+
+
 
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs, uiOptions));
 
