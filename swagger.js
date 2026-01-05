@@ -67,6 +67,20 @@ const specs = swaggerJsdoc(options);
 // ==========================
 // Export
 // ==========================
+
+app.use((req, res, next) => {
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self'; " +
+    // เพิ่ม 'unsafe-inline' และตรวจดูว่าอนุญาต CDN ครบถ้วน
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://unpkg.com; " +
+    "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://fonts.googleapis.com; " +
+    "img-src 'self' data: validator.swagger.io; " +
+    "connect-src 'self' *;"
+  );
+  next();
+});
+
 module.exports = {
   swaggerUi,
   specs,

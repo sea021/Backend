@@ -29,7 +29,6 @@ const swaggerOptions = {
         url: `http://localhost:${process.env.PORT || 3000}`,
         description: 'Local Development Server',
       },
-      // เพิ่ม URL ของ Vercel หรือ Production Server ตรงนี้ได้
     ],
     components: {
       securitySchemes: {
@@ -41,11 +40,8 @@ const swaggerOptions = {
       },
     },
   },
-  // ระบุ Path เพื่อดึง Comment จากทุกไฟล์ในโฟลเดอร์ routes มาแสดงผล
-  apis: [
-    path.join(__dirname, './index.js'),
-    path.join(__dirname, './routes/*.js'),
-  ],
+  // ดึงเฉพาะไฟล์ใน routes มาแสดงผล เพื่อลดโอกาสเกิด Error คีย์ซ้ำจาก index.js
+  apis: [path.join(__dirname, './routes/*.js')],
 };
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
@@ -58,35 +54,38 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 /**
- * แก้ปัญหา Content Security Policy (CSP) เพื่อให้ Swagger UI โหลดได้บน Vercel/Production
- * ช่วยแก้ปัญหา Error "SwaggerUIBundle is not defined"
+ * แก้ปัญหา Content Security Policy (CSP) 
+ * ต้องวางไว้ก่อน app.use('/api-docs') เสมอ
  */
 app.use((req, res, next) => {
   res.setHeader(
     "Content-Security-Policy",
     "default-src 'self'; " +
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com https://unpkg.com; " +
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; " +
+    "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com https://unpkg.com https://fonts.googleapis.com; " +
     "img-src 'self' data: validator.swagger.io; " +
-    "connect-src 'self' *;" // อนุญาตให้เชื่อมต่อ API
+    "connect-src 'self' *;"
   );
   next();
 });
 
 // ==========================
-// 4. Routes
+// 4. Routes & Swagger UI Fix
 // ==========================
 
-// หน้าแสดงเอกสาร API
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+// ใช้ CDN สำหรับ CSS และ JS ของ Swagger UI เพื่อป้องกันไฟล์ในเครื่องโหลดไม่ขึ้นบน Hosting/Vercel
+const swaggerUiOptions = {
   swaggerOptions: {
-    persistAuthorization: true, // ทำให้ Token ไม่หายเมื่อ Refresh หน้าเว็บ
-  }
-}));
+    persistAuthorization: true,
+  },
+  // ลบ customCssUrl และ customJs ออกไปก่อนเพื่อทดสอบแบบมาตรฐาน
+};
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions));
 
 // เชื่อมต่อ API Routes
 app.use('/api/users', require('./routes/users'));
-app.use('/api/products', require('./routes/products'));
+// app.use('/api/products', require('./routes/products'));
 
 // Root Endpoint
 app.get('/', (req, res) => {
@@ -101,7 +100,6 @@ app.get('/', (req, res) => {
 // ==========================
 const PORT = process.env.PORT || 3000;
 
-// รองรับการ Export สำหรับ Vercel
 module.exports = app;
 
 if (require.main === module) {
