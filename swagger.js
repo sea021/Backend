@@ -1,12 +1,18 @@
 const swaggerJsdoc = require('swagger-jsdoc');
+const swaggerUi = require('swagger-ui-express');
+const path = require('path');
 
 // ==========================
-// Server URL (Local + Vercel)
+// Server URL (รองรับ Local + Vercel)
 // ==========================
-const serverUrl = process.env.VERCEL_URL
-  ? `https://${process.env.VERCEL_URL}`
-  : 'http://localhost:3000';
+const serverUrl =
+  process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : 'http://localhost:3000';
 
+// ==========================
+// Swagger options
+// ==========================
 const options = {
   definition: {
     openapi: '3.0.0',
@@ -15,6 +21,8 @@ const options = {
       version: '1.0.0',
       description: 'API documentation',
     },
+
+    // ✅ สำคัญ: ทำให้ Try it out ยิงไปโดเมนถูก
     servers: [
       {
         url: serverUrl,
@@ -23,6 +31,10 @@ const options = {
           : 'Local server',
       },
     ],
+
+    // ==========================
+    // JWT Auth
+    // ==========================
     components: {
       securitySchemes: {
         bearerAuth: {
@@ -32,13 +44,30 @@ const options = {
         },
       },
     },
-    security: [{ bearerAuth: [] }],
+
+    // ✅ ทำให้ปุ่ม Authorize ใช้ได้ทั้งระบบ
+    security: [
+      {
+        bearerAuth: [],
+      },
+    ],
   },
 
-  // 🔥 สำคัญมาก
-  apis: ['./**/*.js'],
+  // ==========================
+  // Path ของไฟล์ route
+  // ==========================
+  apis: [path.join(__dirname, '/routes/*.js')],
 };
 
+// ==========================
+// Build specs
+// ==========================
 const specs = swaggerJsdoc(options);
 
-module.exports = { specs };
+// ==========================
+// Export
+// ==========================
+module.exports = {
+  swaggerUi,
+  specs,
+};
