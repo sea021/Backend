@@ -269,6 +269,29 @@ router.get('/profile', verifyToken, async (req, res) => {
  *       404:
  *         description: User not found
  */
+
+
+/* =========================
+   GET SINGLE USER (เพิ่มส่วนนี้เข้าไป)
+========================= */
+router.get('/:id', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [rows] = await db.query(
+      'SELECT id, firstname, fullname, lastname, username, status FROM tbl_users WHERE id=?',
+      [id]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error', details: err.message });
+  }
+});
+
 router.put('/:id', verifyToken, async (req, res) => {
   const { id } = req.params;
   const { firstname, fullname, lastname, username, password, status } = req.body;
