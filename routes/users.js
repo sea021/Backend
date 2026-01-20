@@ -515,3 +515,100 @@ router.delete('/:id', verifyToken, async (req, res) => {
 });
 
 module.exports = router;
+/* =========================
+   GET USERS (รวมทั้ง ดึงทั้งหมด และ ดึงคนเดียว)
+   👉 แก้ไข: รวม logic ไว้ใน route '/' ตัวเดียว แล้วเช็ค req.query.id เอา
+========================= */
+router.get('/', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.query; // รับค่า ?id=... จาก URL
+
+    // 1. กรณีมี ID ส่งมา (เช่น ?id=5) -> ดึงแค่คนเดียว
+    if (id) {
+        const [rows] = await db.query(
+            'SELECT id, firstname, fullname, lastname, username, status, email FROM tbl_users WHERE id=?',
+            [id]
+        );
+        if (!rows.length) return res.status(404).json({ error: 'User not found' });
+        return res.json(rows[0]);
+    }
+
+    // 2. กรณีไม่มี ID (ดึงทั้งหมด)
+    const [rows] = await db.query(
+      'SELECT id, firstname, fullname, lastname, username, status, email FROM tbl_users'
+    );
+    res.json(rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+/* =========================
+   UPDATE USER
+   👉 แก้ไข: เปลี่ยนจาก '/:id' เป็น '/' และรับ id จาก query หรือ body
+========================= */
+router.put('/', verifyToken, async (req, res) => {
+  // รับ ID
+  const id = req.query.id || req.body.id; 
+  
+  if (!id) return res.status(400).json({ error: 'User ID is required' });
+
+  const { firstname, fullname, lastname, username, password, status } = req.body;
+
+  try {
+      // เช็ค Username ซ้ำ (ต้องไม่ซ้ำกับคนอื่น ยกเว้นตัวเอง)
+      const [exists] = await db.query(
+        'SELECT id FROM tbl_users WHERE username=? AND id!=?',
+        [username, id]
+      );
+      if (exists.length) {
+        return res.status(409).json({ error: 'Username already exists' });
+      }
+
+      let sql = 'UPDATE tbl_users SET firstname=?, fullname=?, lastname=?, username=?, status=?';
+      const params = [firstname, fullname, lastname, username, status];
+
+      if (password && password.trim() !== "") {
+        const hash = await bcrypt.hash(password, 10);
+        sql += ', password=?';
+        params.push(hash);
+      }
+
+      sql += ' WHERE id=?';
+      params.push(id);
+
+      const [result] = await db.query(sql, params);
+
+      if (!result.affectedRows) {
+        return res.status(404).json({ error: 'User not found or no changes made' });
+      }
+
+      res.json({ message: 'User updated successfully' });
+  } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Update failed', details: err.message });
+  }
+});
+
+/* =========================
+   DELETE USER
+   👉 แก้ไข: เปลี่ยนจาก '/:id' เป็น '/' และรับ id จาก query
+========================= */
+router.delete('/', verifyToken, async (req, res) => {
+  const id = req.query.id || req.body.id;
+
+  if (!id) return res.status(400).json({ error: 'User ID is required' });
+
+  try {
+      const [result] = await db.query('DELETE FROM tbl_users WHERE id=?', [id]);
+      if (!result.affectedRows) return res.status(404).json({ error: 'User not found' });
+      res.json({ message: 'User deleted successfully' });
+  } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Delete failed', details: err.message });
+  }
+});
+
+module.exports = router;
