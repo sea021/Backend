@@ -30,6 +30,8 @@ router.get('/ping', async (req, res) => {
  *             type: object
  *             required: [username, password]
  *             properties:
+ *               email:
+ *                 type: string
  *               firstname:
  *                 type: string
  *               fullname:
@@ -39,8 +41,6 @@ router.get('/ping', async (req, res) => {
  *               username:
  *                 type: string
  *               password:
- *                 type: string
- *               status:
  *                 type: string
  *     responses:
  *       201:
@@ -65,12 +65,15 @@ router.get('/ping', async (req, res) => {
  *         description: Internal server error
  */
 router.post('/', async (req, res) => {
-  const { firstname, fullname, lastname, username, password, status } = req.body;
+  // ⚠️ เพิ่ม email เข้ามาใน destruct process
+  const { firstname, fullname, lastname, username, password, status, email } = req.body;
 
   try {
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password required' });
     }
+
+    const userStatus = (status && status.trim() !== "") ? status : 'user';
 
     const [exists] = await db.query(
       'SELECT id FROM tbl_users WHERE username=?',
@@ -83,26 +86,34 @@ router.post('/', async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
 
-    const [result] = await db.query(
-      `INSERT INTO tbl_users
-       (firstname, fullname, lastname, username, password, status)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [firstname, fullname, lastname, username, hash, status || 'user']
-    );
+    // ⚠️ ตรวจสอบว่าใน Database ของคุณมี column 'email' หรือยัง ถ้าไม่มีต้องไปสร้างก่อนนะครับ
+      const [result] = await db.query(
+          `INSERT INTO tbl_users 
+          (firstname, fullname, lastname, email, username, password, status, created_at, updated_at) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+          [
+            firstname, 
+            fullname, 
+            lastname, 
+            email || null, 
+            username, 
+            hash, 
+            userStatus // ✅ ใช้ตัวแปรที่เราดักค่าไว้ตรงนี้
+          ]
+        );
 
-    res.status(201).json({
-      message: 'User created',
-      id: result.insertId
-    });
+    res.status(201).json({ message: 'User created', id: result.insertId });
+
   } catch (err) {
-    res.status(500).json({ error: 'Register failed' });
+    console.error(err); // แนะนำให้ log error เพื่อดูสาเหตุเวลาพัง
+    res.status(500).json({ error: 'Register failed', details: err.message });
   }
 });
 
 router.get('/', verifyToken, async (req, res) => {
   try {
     const [rows] = await db.query(
-      'SELECT id, firstname, fullname, lastname, username, status FROM tbl_users'
+      'SELECT id, firstname, fullname, lastname, username, status, email FROM tbl_users'
     );
     res.json(rows);
   } catch (err) {
@@ -191,6 +202,167 @@ router.post('/login', async (req, res) => {
 router.post('/logout', verifyToken, (req, res) => {
   res.json({ message: 'Logout success (please delete token on client)' });
 });
+
+/* =========================
+   FORGOT PASSWORD (NEW SECTIONS) ✅ เพิ่มใหม่ตรงนี้
+========================= */
+/**
+ * @swagger
+ * /api/users/check-email:
+ *   post:
+ *     summary: ตรวจสอบว่าอีเมลมีอยู่ในระบบหรือไม่
+ *     tags:
+ *       - Users
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: user@example.com
+ *     responses:
+ *       200:
+ *         description: พบอีเมลในระบบ
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 found:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Email found
+ *       404:
+ *         description: ไม่พบอีเมลในระบบ
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 found:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *                   example: ไม่พบอีเมลนี้ในระบบ
+ *       500:
+ *         description: Database error
+ */
+// 1. ตรวจสอบว่ามีอีเมลนี้ในระบบหรือไม่
+router.post('/check-email', async (req, res) => {
+  const { email } = req.body;
+  try {
+    // ⚠️ ต้องมั่นใจว่า Database มี column ชื่อ 'email'
+    const [rows] = await db.query('SELECT id FROM tbl_users WHERE email = ?', [email]);
+    
+    if (rows.length > 0) {
+      return res.status(200).json({ found: true, message: 'Email found' });
+    } else {
+      return res.status(404).json({ found: false, error: 'ไม่พบอีเมลนี้ในระบบ' });
+    }
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Database error', details: err.message });
+  }
+});
+
+
+/**
+ * @swagger
+ * /api/users/reset-password:
+ *   post:
+ *     summary: เปลี่ยนรหัสผ่านใหม่โดยใช้อีเมล (Direct Reset)
+ *     tags:
+ *       - Users
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - newPassword
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: user@example.com
+ *               newPassword:
+ *                 type: string
+ *                 example: newStrongPassword123
+ *     responses:
+ *       200:
+ *         description: เปลี่ยนรหัสผ่านสำเร็จ
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: เปลี่ยนรหัสผ่านสำเร็จ
+ *       400:
+ *         description: ส่งข้อมูลไม่ครบ
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: Email and new password required
+ *       404:
+ *         description: ไม่พบผู้ใช้งาน
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: string
+ *                   example: ไม่พบผู้ใช้งานหรืออีเมลไม่ถูกต้อง
+ *       500:
+ *         description: Update failed
+ */
+// 2. เปลี่ยนรหัสผ่านใหม่ทันที (Direct Reset)
+router.post('/reset-password', async (req, res) => {
+  const { email, newPassword } = req.body;
+
+  if (!email || !newPassword) {
+    return res.status(400).json({ error: 'Email and new password required' });
+  }
+
+  try {
+    // Hash รหัสผ่านใหม่
+    const hash = await bcrypt.hash(newPassword, 10);
+
+    // อัปเดตลง Database
+    const [result] = await db.query(
+      'UPDATE tbl_users SET password = ? WHERE email = ?', 
+      [hash, email]
+    );
+
+    if (result.affectedRows === 0) {
+       return res.status(404).json({ error: 'ไม่พบผู้ใช้งานหรืออีเมลไม่ถูกต้อง' });
+    }
+
+    return res.status(200).json({ success: true, message: 'เปลี่ยนรหัสผ่านสำเร็จ' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Update failed', details: err.message });
+  }
+});
+
 
 /* =========================
    PROFILE
