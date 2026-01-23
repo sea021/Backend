@@ -9,7 +9,7 @@ const swaggerUi = require('swagger-ui-express');
 // ✅ แก้ตรงนี้ (สำคัญที่สุด)
 // swagger.js อยู่ระดับเดียวกับ package.json
 // index.js อยู่ใน api → ต้องถอยออก 1 ชั้น
-const specs = require('../swagger');
+const specs = require('./swagger');
 
 const app = express();
 
@@ -52,7 +52,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs, uiOptions));
 /* =========================
    Routes
 ========================= */
-app.use('/api/users', require('../routes/users'));
+app.use('/api/users', require('./routes/users'));
 
 /* =========================
    Root
