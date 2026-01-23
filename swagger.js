@@ -2,9 +2,9 @@ const swaggerJsdoc = require('swagger-jsdoc');
 const path = require('path');
 
 // รองรับ Local + Vercel (ไม่ fix domain)
-const serverUrl = process.env.VERCEL_URL
-  ? `https://${process.env.VERCEL_URL}`
-  : `http://localhost:${process.env.PORT || 5000}`;
+const serverUrl = process.env.NODE_ENV === 'production'
+  ? '/'  // ใช้ relative path เพื่อให้ Swagger ใช้ domain ปัจจุบันอัตโนมัติ
+  : `http://localhost:${process.env.PORT || 3000}`;
 
 const options = {
   definition: {
